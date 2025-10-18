@@ -14,12 +14,18 @@ const PORT = process.env.PORT || 5000;
 // trust proxy for Render
 app.set('trust proxy', 1);
 
+// Simple request logger for debugging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // Security middleware
 app.use(helmet());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000, // default 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100,
   message: 'Too many requests from this IP, please try again later.'
 });
@@ -34,8 +40,9 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow server-to-server / curl
-    return allowedOrigins.includes(origin) ? callback(null, true) : callback(new Error('CORS not allowed'));
+    if (!origin) return callback(null, true); // allow curl / server-to-server requests
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false); // disallow
   },
   credentials: true
 }));
@@ -67,7 +74,7 @@ const contactSchema = new mongoose.Schema({
 
 const Contact = mongoose.model('Contact', contactSchema);
 
-// Email transporter configuration (fixed)
+// Email transporter configuration (corrected)
 const createTransporter = async () => {
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -107,11 +114,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // Get portfolio data
-// ...existing code...
 app.get('/api/portfolio', async (req, res) => {
   try {
     const portfolioData = {
-      // ...existing portfolio data...
       personalInfo: {
         name: 'Chala Birmechu',
         title: 'Full Stack & Mobile Developer',
@@ -130,7 +135,7 @@ app.get('/api/portfolio', async (req, res) => {
         mobile: ['Flutter', 'React Native', 'Android', 'iOS'],
         devops: ['Git', 'Docker', 'AWS', 'Heroku', 'CI/CD']
       },
-      // ...projects & experience...
+      // projects & experience omitted for brevity
     };
 
     res.json(portfolioData);
@@ -209,7 +214,6 @@ app.post('/api/contact', [
         }
       } catch (emailError) {
         console.error('Email sending failed:', emailError);
-        // proceed — don't fail the request if email fails
       }
     } else {
       console.warn('No mail transporter available; skipping email send.');
