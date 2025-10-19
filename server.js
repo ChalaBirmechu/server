@@ -248,7 +248,7 @@ app.patch('/api/admin/messages/:id/read', async (req, res) => {
 });
 
 // --- Root route ---
-app.Post('/', (req, res) => {
+app.get('/', (req, res) => {
   res.send('🌍 Portfolio Backend API is Running. Use /api endpoints.');
 });
 
