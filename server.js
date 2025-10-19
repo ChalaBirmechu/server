@@ -1,4 +1,4 @@
-// ...existing code...
+// --- Existing & Required Dependencies ---
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -56,7 +56,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // --- MongoDB connection ---
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
-  console.warn('⚠️ MONGODB_URI not set. Please configure it in your .env.');
+  console.warn('⚠️ MONGODB_URI not set. Please configure it in your .env file.');
 }
 
 mongoose
@@ -245,6 +245,11 @@ app.patch('/api/admin/messages/:id/read', async (req, res) => {
     console.error('Error updating message:', error);
     res.status(500).json({ error: 'Failed to update message' });
   }
+});
+
+// --- Root route ---
+app.get('/', (req, res) => {
+  res.send('🌍 Portfolio Backend API is Running. Use /api endpoints.');
 });
 
 // --- Error handler ---
