@@ -149,7 +149,7 @@ app.get('/api/portfolio', async (req, res) => {
 
 // Contact form submission
 app.post(
-  '/api/contact.js',
+  '/api/contact',
   [
     body('name')
       .trim()
