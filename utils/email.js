@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 
-const createTransporter = async () => {
+async function createTransporter() {
   if (process.env.NODE_ENV === 'production') {
     return nodemailer.createTransport({
       service: 'gmail',
@@ -14,13 +14,12 @@ const createTransporter = async () => {
     return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
-      secure: false,
       auth: {
         user: testAccount.user,
         pass: testAccount.pass,
       },
     });
   }
-};
+}
 
 module.exports = { createTransporter };
