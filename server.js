@@ -32,8 +32,9 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // --- CORS configuration ---
+// Allow frontend domain from environment variables
 const allowedOrigins = [
-  process.env.FRONTEND_URL, // e.g. https://chalabirmechngs.vercel.app
+  process.env.FRONTEND_URL || 'https://chalabirmechngs.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ].filter(Boolean);
@@ -41,9 +42,9 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // allow mobile apps or curl requests
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error('CORS not allowed for this origin'));
+      callback(new Error('CORS not allowed for this origin'));
     },
     credentials: true,
   })
@@ -55,15 +56,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // --- MongoDB connection ---
 const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri) {
-  console.warn('⚠️ MONGODB_URI not set. Please configure it in your .env file.');
-}
+if (!mongoUri) console.warn('⚠️ MONGODB_URI not set.');
 
 mongoose
-  .connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(mongoUri)
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch((err) => console.error('❌ MongoDB connection error:', err));
 
@@ -80,15 +76,17 @@ const Contact = mongoose.model('Contact', contactSchema);
 // --- Email Transporter ---
 const createTransporter = async () => {
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn('⚠️ EMAIL_USER or EMAIL_PASS not set for production mailer.');
-    }
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS)
+      throw new Error('EMAIL_USER or EMAIL_PASS not set in production.');
+
     return nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        pass: process.env.EMAIL_PASS, // must be Gmail App Password
       },
+      secure: true,
+      connectionTimeout: 10000, // 10s timeout
     });
   } else {
     const testAccount = await nodemailer.createTestAccount();
@@ -96,10 +94,7 @@ const createTransporter = async () => {
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
+      auth: { user: testAccount.user, pass: testAccount.pass },
     });
   }
 };
@@ -117,159 +112,66 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Portfolio data
-app.get('/api/portfolio', async (req, res) => {
-  try {
-    const portfolioData = {
-      personalInfo: {
-        name: 'Chala Birmechu',
-        title: 'Full Stack & Mobile Developer',
-        location: 'Addis Ababa, Ethiopia',
-        email: 'chalabirmechu@gmail.com',
-        phone: ['+251915950217', '+251941274261'],
-        bio: 'I am a passionate software engineer specializing in full-stack web development and mobile application development. With hands-on experience in both frontend & backend technologies as well as native and cross-platform mobile apps, I bring ideas to life through clean code and scalable architecture.',
-        experience: '2+',
-        projects: '5+',
-        clients: '3+',
-        satisfaction: '100%',
-      },
-      skills: {
-        frontend: ['React', 'Vue', 'HTML5', 'CSS3', 'JavaScript', 'TailwindCSS'],
-        backend: ['Node.js', 'Express', 'Django', 'Spring Boot', 'Flask'],
-        mobile: ['Flutter', 'React Native', 'Android', 'iOS'],
-        devops: ['Git', 'Docker', 'AWS', 'Heroku', 'CI/CD'],
-      },
-    };
-    res.json(portfolioData);
-  } catch (error) {
-    console.error('Error fetching portfolio data:', error);
-    res.status(500).json({ error: 'Failed to fetch portfolio data' });
-  }
-});
-
 // Contact form submission
 app.post(
   '/api/contact',
   [
-    body('name')
-      .trim()
-      .isLength({ min: 2, max: 50 })
-      .withMessage('Name must be between 2 and 50 characters'),
-    body('email')
-      .isEmail()
-      .normalizeEmail()
-      .withMessage('Please provide a valid email'),
-    body('message')
-      .trim()
-      .isLength({ min: 10, max: 1000 })
-      .withMessage('Message must be between 10 and 1000 characters'),
+    body('name').trim().isLength({ min: 2, max: 50 }),
+    body('email').isEmail().normalizeEmail(),
+    body('message').trim().isLength({ min: 10, max: 1000 }),
   ],
   async (req, res) => {
     try {
       const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error: 'Validation failed',
-          details: errors.array(),
-        });
-      }
+      if (!errors.isEmpty())
+        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
 
       const { name, email, message } = req.body;
+
+      // Save message in MongoDB
       const contactMessage = new Contact({ name, email, message });
       await contactMessage.save();
 
+      // Send email
       const transporter = await createTransporter();
 
-      const mailOptions = {
+      // Admin email
+      await transporter.sendMail({
         from: process.env.EMAIL_USER || 'noreply@portfolio.com',
         to: 'chalabirmechu@gmail.com',
         subject: `New Contact Form Submission from ${name}`,
-        html: `
-          <h2>New Contact Form Submission</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Message:</strong></p>
-          <p>${message.replace(/\n/g, '<br>')}</p>
-          <hr>
-          <p><em>Sent from portfolio contact form</em></p>
-        `,
-      };
+        html: `<h2>New Contact Form Submission</h2>
+               <p><strong>Name:</strong> ${name}</p>
+               <p><strong>Email:</strong> ${email}</p>
+               <p><strong>Message:</strong></p>
+               <p>${message.replace(/\n/g, '<br>')}</p>`,
+      });
 
-      const autoReply = {
+      // Auto-reply
+      await transporter.sendMail({
         from: process.env.EMAIL_USER || 'noreply@portfolio.com',
         to: email,
         subject: 'Thank you for contacting Chala Birmechu',
-        html: `
-          <h2>Thank you for your message!</h2>
-          <p>Hi ${name},</p>
-          <p>Thank you for reaching out! I've received your message and will get back to you as soon as possible.</p>
-          <p>Best regards,<br>Chala Birmechu</p>
-        `,
-      };
-
-      await transporter.sendMail(mailOptions);
-      await transporter.sendMail(autoReply);
+        html: `<h2>Thank you for your message!</h2>
+               <p>Hi ${name},</p>
+               <p>Thank you for reaching out! I will get back to you as soon as possible.</p>
+               <p>Best regards,<br>Chala Birmechu</p>`,
+      });
 
       res.json({ success: true, message: 'Message sent successfully!' });
     } catch (error) {
       console.error('Contact form error:', error);
       res.status(500).json({
         error: 'Failed to send message. Please try again later.',
+        details: error.message,
       });
     }
   }
 );
 
-// Admin: get messages
-app.get('/api/admin/messages', async (req, res) => {
-  try {
-    const messages = await Contact.find().sort({ createdAt: -1 }).limit(50);
-    res.json(messages);
-  } catch (error) {
-    console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
-
-// Mark as read
-app.patch('/api/admin/messages/:id/read', async (req, res) => {
-  try {
-    const message = await Contact.findByIdAndUpdate(
-      req.params.id,
-      { isRead: true },
-      { new: true }
-    );
-    if (!message) return res.status(404).json({ error: 'Message not found' });
-    res.json({ success: true, message: 'Message marked as read' });
-  } catch (error) {
-    console.error('Error updating message:', error);
-    res.status(500).json({ error: 'Failed to update message' });
-  }
-});
-
-// --- Root route ---
-app.get('/', (req, res) => {
-  res.send('🌍 Portfolio Backend API is Running. Use /api endpoints.');
-});
-
-// --- Error handler ---
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err.stack);
-  res.status(500).json({
-    error: 'Something went wrong!',
-    message:
-      process.env.NODE_ENV === 'development'
-        ? err.message
-        : 'Internal server error',
-  });
-});
-
 // --- 404 fallback ---
 app.use((req, res) => {
-  res.status(404).json({
-    error: 'Route not found',
-    message: 'The requested endpoint does not exist',
-  });
+  res.status(404).json({ error: 'Route not found' });
 });
 
 // --- Start server ---
