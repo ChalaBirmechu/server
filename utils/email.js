@@ -1,7 +1,11 @@
+// utils/email.js
 const nodemailer = require('nodemailer');
 
 async function createTransporter() {
   if (process.env.NODE_ENV === 'production') {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn('⚠️ EMAIL_USER or EMAIL_PASS not set for production mailer.');
+    }
     return nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -14,6 +18,7 @@ async function createTransporter() {
     return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
+      secure: false,
       auth: {
         user: testAccount.user,
         pass: testAccount.pass,
