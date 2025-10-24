@@ -64,8 +64,10 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
+  // Remove deprecated options - they're no longer needed in newer versions
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected successfully'))
-  .catch((err) => console.error('❌ MongoDB connection error:', err));
+  .catch(err => console.log('❌ MongoDB connection error:', err));
 
 // --- Contact Message Schema ---
 const contactSchema = new mongoose.Schema({
