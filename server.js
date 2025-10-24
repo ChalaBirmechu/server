@@ -79,16 +79,24 @@ const Contact = mongoose.model('Contact', contactSchema);
 
 // --- Email Transporter ---
 const createTransporter = async () => {
+  // ... (existing dev environment setup)
+
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn('⚠️ EMAIL_USER or EMAIL_PASS not set for production mailer.');
+      console.warn('⚠️ EMAIL_USER or EMAIL_PASS not set for production mailer. Email sending will likely fail.');
     }
     return nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com', // Explicit host
+      port: 465,              // Explicit port for SSL
+      secure: true,           // Use SSL/TLS
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      // You can add a specific timeout here if you suspect network delays,
+      // though ETIMEDOUT usually means it's failing before the default.
+      // connectionTimeout: 15000, // 15 seconds
+      // socketTimeout: 15000,   // 15 seconds
     });
   } else {
     const testAccount = await nodemailer.createTestAccount();
